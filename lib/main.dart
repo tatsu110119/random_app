@@ -7,11 +7,7 @@ void main() {
   runApp(const MyApp());
 }
 
-enum RouletteSpeed {
-  short,
-  normal,
-  long,
-}
+enum RouletteSpeed { short, normal, long }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -71,14 +67,11 @@ class _RandomPageState extends State<RandomPage> {
     setState(() {
       history = savedHistory.map(int.parse).toList();
       soundOn = savedSound;
-
-      if (savedSpeed == 'short') {
-        speed = RouletteSpeed.short;
-      } else if (savedSpeed == 'long') {
-        speed = RouletteSpeed.long;
-      } else {
-        speed = RouletteSpeed.normal;
-      }
+      speed = switch (savedSpeed) {
+        'short' => RouletteSpeed.short,
+        'long' => RouletteSpeed.long,
+        _ => RouletteSpeed.normal,
+      };
     });
   }
 
@@ -99,7 +92,6 @@ class _RandomPageState extends State<RandomPage> {
   Future<void> clearHistory() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('history');
-
     setState(() {
       history.clear();
     });
@@ -166,7 +158,6 @@ class _RandomPageState extends State<RandomPage> {
       final rate = elapsed / total;
 
       int delay;
-
       if (rate < 0.38) {
         delay = 350;
       } else if (rate < 0.62) {
@@ -211,22 +202,21 @@ class _RandomPageState extends State<RandomPage> {
     );
   }
 
-  void addMinus(TextEditingController controller) {
-    final text = controller.text;
-
+  void makeNegative(TextEditingController controller) {
+    final text = controller.text.trim();
     setState(() {
-      if (text.startsWith('-')) {
-        controller.text = text.substring(1);
-      } else {
-        controller.text = '-$text';
+      if (text.isEmpty || text == "0") {
+        controller.text = "-1";
+      } else if (!text.startsWith("-")) {
+        controller.text = "-$text";
       }
     });
   }
 
-  void addValue(TextEditingController controller, int amount) {
-    final value = int.tryParse(controller.text) ?? 0;
+  void makePositive(TextEditingController controller) {
+    final text = controller.text.trim();
     setState(() {
-      controller.text = (value + amount).toString();
+      controller.text = text.replaceFirst("-", "");
     });
   }
 
@@ -265,49 +255,30 @@ class _RandomPageState extends State<RandomPage> {
         TextField(
           controller: controller,
           decoration: cuteInput(label, icon),
-          keyboardType: TextInputType.numberWithOptions(
-            signed: allowMinus,
-          ),
+          keyboardType: TextInputType.number,
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            if (allowMinus)
+        if (allowMinus) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: isRolling ? null : () => addMinus(controller),
-                  child: const Text('±'),
+                  onPressed: isRolling ? null : () => makeNegative(controller),
+                  child: const Text('−'),
                 ),
               ),
-            if (allowMinus) const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: isRolling ? null : () => addValue(controller, -1),
-                child: const Text('-1'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: isRolling ? null : () => makePositive(controller),
+                  child: const Text('＋'),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: isRolling ? null : () => addValue(controller, 1),
-                child: const Text('+1'),
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ],
     );
-  }
-
-  String speedLabel(RouletteSpeed value) {
-    switch (value) {
-      case RouletteSpeed.short:
-        return '短い';
-      case RouletteSpeed.normal:
-        return '普通';
-      case RouletteSpeed.long:
-        return '長い';
-    }
   }
 
   @override
@@ -323,222 +294,211 @@ class _RandomPageState extends State<RandomPage> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(18),
-          child: Column(
+          child: ListView(
             children: [
-              Expanded(
-                child: ListView(
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFEAF4),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Column(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFEAF4),
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: Column(
-                        children: [
-                          numberInput(
-                            label: '最小値',
-                            controller: minController,
-                            icon: Icons.remove_circle_outline,
-                            allowMinus: true,
-                          ),
-                          const SizedBox(height: 16),
-                          numberInput(
-                            label: '最大値',
-                            controller: maxController,
-                            icon: Icons.add_circle_outline,
-                            allowMinus: true,
-                          ),
-                          const SizedBox(height: 16),
-                          numberInput(
-                            label: '間隔',
-                            controller: stepController,
-                            icon: Icons.straighten,
-                            allowMinus: false,
-                          ),
-                        ],
-                      ),
+                    numberInput(
+                      label: '最小値',
+                      controller: minController,
+                      icon: Icons.remove_circle_outline,
+                      allowMinus: true,
                     ),
-
                     const SizedBox(height: 18),
+                    numberInput(
+                      label: '最大値',
+                      controller: maxController,
+                      icon: Icons.add_circle_outline,
+                      allowMinus: true,
+                    ),
+                    const SizedBox(height: 18),
+                    numberInput(
+                      label: '間隔',
+                      controller: stepController,
+                      icon: Icons.straighten,
+                      allowMinus: false,
+                    ),
+                  ],
+                ),
+              ),
 
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Column(
-                        children: [
-                          SwitchListTile(
-                            title: const Text('効果音'),
-                            subtitle: Text(soundOn ? 'ON' : 'OFF'),
-                            value: soundOn,
-                            onChanged: isRolling
+              const SizedBox(height: 18),
+
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      title: const Text('効果音'),
+                      subtitle: Text(soundOn ? 'ON' : 'OFF'),
+                      value: soundOn,
+                      onChanged: isRolling
+                          ? null
+                          : (value) {
+                              setState(() {
+                                soundOn = value;
+                              });
+                              saveSettings();
+                            },
+                    ),
+                    const Divider(),
+                    Row(
+                      children: [
+                        const Text(
+                          '時間',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SegmentedButton<RouletteSpeed>(
+                            segments: const [
+                              ButtonSegment(
+                                value: RouletteSpeed.short,
+                                label: Text('短い'),
+                              ),
+                              ButtonSegment(
+                                value: RouletteSpeed.normal,
+                                label: Text('普通'),
+                              ),
+                              ButtonSegment(
+                                value: RouletteSpeed.long,
+                                label: Text('長い'),
+                              ),
+                            ],
+                            selected: {speed},
+                            onSelectionChanged: isRolling
                                 ? null
                                 : (value) {
                                     setState(() {
-                                      soundOn = value;
+                                      speed = value.first;
                                     });
                                     saveSettings();
                                   },
                           ),
-                          const Divider(),
-                          Row(
-                            children: [
-                              const Text(
-                                '時間',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: SegmentedButton<RouletteSpeed>(
-                                  segments: const [
-                                    ButtonSegment(
-                                      value: RouletteSpeed.short,
-                                      label: Text('短い'),
-                                    ),
-                                    ButtonSegment(
-                                      value: RouletteSpeed.normal,
-                                      label: Text('普通'),
-                                    ),
-                                    ButtonSegment(
-                                      value: RouletteSpeed.long,
-                                      label: Text('長い'),
-                                    ),
-                                  ],
-                                  selected: {speed},
-                                  onSelectionChanged: isRolling
-                                      ? null
-                                      : (value) {
-                                          setState(() {
-                                            speed = value.first;
-                                          });
-                                          saveSettings();
-                                        },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 22),
-
-                    AnimatedScale(
-                      scale: isRolling ? 1.05 : hasFinalResult ? 1.2 : 1.0,
-                      duration: const Duration(milliseconds: 250),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 38),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(36),
-                          gradient: const LinearGradient(
-                            colors: [
-                              Color(0xFFFFB8DA),
-                              Color(0xFFFFE4F2),
-                            ],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.pinkAccent.withOpacity(0.25),
-                              blurRadius: 24,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
-                        ),
-                        child: AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 300),
-                          style: TextStyle(
-                            fontSize: fontSize,
-                            fontWeight: FontWeight.w900,
-                            color: const Color(0xFF7A2450),
-                          ),
-                          child: Text(
-                            result == null ? '？' : '$result',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    FilledButton.icon(
-                      onPressed: isRolling ? null : generate,
-                      icon: const Icon(Icons.auto_awesome),
-                      label: Text(isRolling ? 'くるくる中…' : 'まわす ✨'),
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size(double.infinity, 60),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          '📜 履歴',
-                          style: TextStyle(
-                            fontSize: 21,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF7A2450),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: history.isEmpty || isRolling
-                              ? null
-                              : clearHistory,
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('消去'),
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 8),
-
-                    if (history.isEmpty)
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text("まだ履歴はありません 🐣"),
-                        ),
-                      )
-                    else
-                      ...history.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final value = entry.value;
-
-                        return Card(
-                          color: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFFFD6EA),
-                              child: Text('${index + 1}'),
-                            ),
-                            title: Text(
-                              value.toString(),
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
                   ],
                 ),
               ),
+
+              const SizedBox(height: 22),
+
+              AnimatedScale(
+                scale: isRolling ? 1.05 : hasFinalResult ? 1.2 : 1.0,
+                duration: const Duration(milliseconds: 250),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 38),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(36),
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFFFB8DA),
+                        Color(0xFFFFE4F2),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.pinkAccent.withOpacity(0.25),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 300),
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF7A2450),
+                    ),
+                    child: Text(
+                      result == null ? '？' : '$result',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              FilledButton.icon(
+                onPressed: isRolling ? null : generate,
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(isRolling ? 'くるくる中…' : 'まわす ✨'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 60),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '📜 履歴',
+                    style: TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF7A2450),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed:
+                        history.isEmpty || isRolling ? null : clearHistory,
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('消去'),
+                  ),
+                ],
+              ),
+
+              if (history.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Text("まだ履歴はありません 🐣"),
+                  ),
+                )
+              else
+                ...history.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final value = entry.value;
+
+                  return Card(
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFFFD6EA),
+                        child: Text('${index + 1}'),
+                      ),
+                      title: Text(
+                        value.toString(),
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
             ],
           ),
         ),
