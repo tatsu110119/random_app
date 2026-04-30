@@ -86,6 +86,32 @@ class _RandomPageState extends State<RandomPage> {
     });
   }
 
+  double smoothStep(double x) {
+    return x * x * (3 - 2 * x);
+  }
+
+  double lerp(double a, double b, double t) {
+    return a + (b - a) * t;
+  }
+
+  int rouletteDelay(int elapsedMs) {
+    const total = 13000;
+    final p = elapsedMs / total;
+
+    if (p < 0.42) {
+      // 最初：かなりゆっくり → 徐々に速く
+      final t = smoothStep(p / 0.42);
+      return lerp(650, 70, t).toInt();
+    } else if (p < 0.62) {
+      // 中盤：高速
+      return 38;
+    } else {
+      // 最後：高速 → かなりゆっくり
+      final t = smoothStep((p - 0.62) / 0.38);
+      return lerp(55, 780, t).toInt();
+    }
+  }
+
   Future<void> generate() async {
     if (isRolling) return;
 
@@ -127,25 +153,18 @@ class _RandomPageState extends State<RandomPage> {
       await rollingPlayer.setReleaseMode(ReleaseMode.loop);
       await rollingPlayer.play(AssetSource('sounds/rolling.mp3'));
 
-      // Web対策
+      // Web/iPhone対策：finish音を無音で一度読み込む
+      await finishPlayer.setVolume(0);
       await finishPlayer.play(AssetSource('sounds/finish.mp3'));
+      await Future.delayed(const Duration(milliseconds: 30));
       await finishPlayer.stop();
+      await finishPlayer.setVolume(1);
     }
 
     final stopwatch = Stopwatch()..start();
 
     while (stopwatch.elapsedMilliseconds < 13000) {
-      final t = stopwatch.elapsedMilliseconds;
-
-      int delay;
-      if (t < 5000) {
-        delay = 350;
-      } else if (t < 8000) {
-        delay = 45;
-      } else {
-        final r = (t - 8000) / 5000;
-        delay = (60 + 450 * r).toInt();
-      }
+      final delay = rouletteDelay(stopwatch.elapsedMilliseconds);
 
       setState(() {
         result = list[random.nextInt(list.length)];
@@ -167,6 +186,7 @@ class _RandomPageState extends State<RandomPage> {
 
     if (soundOn) {
       await finishPlayer.stop();
+      await Future.delayed(const Duration(milliseconds: 80));
       await finishPlayer.play(AssetSource('sounds/finish.mp3'));
     }
 
