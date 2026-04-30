@@ -81,34 +81,24 @@ class _RandomPageState extends State<RandomPage> {
   Future<void> clearHistory() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('history');
-    setState(() {
-      history.clear();
-    });
+    setState(() => history.clear());
   }
 
-  double smoothStep(double x) {
-    return x * x * (3 - 2 * x);
-  }
+  // スムーズ加減速
+  double smoothStep(double x) => x * x * (3 - 2 * x);
 
-  double lerp(double a, double b, double t) {
-    return a + (b - a) * t;
-  }
-
-  int rouletteDelay(int elapsedMs) {
+  int getDelay(int elapsed) {
     const total = 13000;
-    final p = elapsedMs / total;
+    final p = elapsed / total;
 
-    if (p < 0.42) {
-      // 最初：かなりゆっくり → 徐々に速く
-      final t = smoothStep(p / 0.42);
-      return lerp(650, 70, t).toInt();
-    } else if (p < 0.62) {
-      // 中盤：高速
-      return 38;
+    if (p < 0.4) {
+      final t = smoothStep(p / 0.4);
+      return (600 - 520 * t).toInt();
+    } else if (p < 0.6) {
+      return 40;
     } else {
-      // 最後：高速 → かなりゆっくり
-      final t = smoothStep((p - 0.62) / 0.38);
-      return lerp(55, 780, t).toInt();
+      final t = smoothStep((p - 0.6) / 0.4);
+      return (60 + 700 * t).toInt();
     }
   }
 
@@ -120,28 +110,18 @@ class _RandomPageState extends State<RandomPage> {
     final step = int.tryParse(stepController.text);
 
     if (min == null || max == null || step == null) {
-      showError("すべて整数で入力してください");
+      showError("入力エラー");
       return;
     }
 
-    if (step <= 0) {
-      showError("間隔は1以上にしてください");
-      return;
-    }
-
-    if (min > max) {
-      showError("最小値は最大値以下にしてください");
+    if (step <= 0 || min > max) {
+      showError("値がおかしい");
       return;
     }
 
     final list = <int>[];
     for (int i = min; i <= max; i += step) {
       list.add(i);
-    }
-
-    if (list.isEmpty) {
-      showError("候補がありません");
-      return;
     }
 
     setState(() {
@@ -153,18 +133,17 @@ class _RandomPageState extends State<RandomPage> {
       await rollingPlayer.setReleaseMode(ReleaseMode.loop);
       await rollingPlayer.play(AssetSource('sounds/rolling.mp3'));
 
-      // Web/iPhone対策：finish音を無音で一度読み込む
-      await finishPlayer.setVolume(0);
-      await finishPlayer.play(AssetSource('sounds/finish.mp3'));
-      await Future.delayed(const Duration(milliseconds: 30));
-      await finishPlayer.stop();
-      await finishPlayer.setVolume(1);
+      // ⭐ Safari対策：最初に予約しておく
+      Future.delayed(const Duration(milliseconds: 13000), () async {
+        await finishPlayer.stop();
+        await finishPlayer.play(AssetSource('sounds/finish.mp3'));
+      });
     }
 
     final stopwatch = Stopwatch()..start();
 
     while (stopwatch.elapsedMilliseconds < 13000) {
-      final delay = rouletteDelay(stopwatch.elapsedMilliseconds);
+      final delay = getDelay(stopwatch.elapsedMilliseconds);
 
       setState(() {
         result = list[random.nextInt(list.length)];
@@ -184,37 +163,20 @@ class _RandomPageState extends State<RandomPage> {
       hasFinalResult = true;
     });
 
-    if (soundOn) {
-      await finishPlayer.stop();
-      await Future.delayed(const Duration(milliseconds: 80));
-      await finishPlayer.play(AssetSource('sounds/finish.mp3'));
-    }
-
     await saveHistory();
   }
 
-  void showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+  void showError(String msg) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  void makeNegative(TextEditingController controller) {
-    final text = controller.text.trim();
-    setState(() {
-      if (text.isEmpty || text == "0") {
-        controller.text = "-1";
-      } else if (!text.startsWith("-")) {
-        controller.text = "-$text";
-      }
-    });
+  void makeNegative(TextEditingController c) {
+    if (!c.text.startsWith('-')) c.text = '-${c.text}';
   }
 
-  void makePositive(TextEditingController controller) {
-    final text = controller.text.trim();
-    setState(() {
-      controller.text = text.replaceFirst("-", "");
-    });
+  void makePositive(TextEditingController c) {
+    c.text = c.text.replaceFirst('-', '');
   }
 
   @override
@@ -227,89 +189,48 @@ class _RandomPageState extends State<RandomPage> {
     super.dispose();
   }
 
-  Widget numberCard({
-    required String title,
-    required String emoji,
-    required TextEditingController controller,
-    required Color backgroundColor,
-    required Color accentColor,
-    required bool allowMinus,
-  }) {
+  Widget inputCard(
+      String title, String emoji, TextEditingController c, Color color,
+      {bool minus = true}) {
     return Container(
-      padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(28),
+        color: color,
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$emoji $title',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: accentColor,
-            ),
-          ),
+          Text('$emoji $title',
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           TextField(
-            controller: controller,
+            controller: c,
             keyboardType: TextInputType.number,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               filled: true,
               fillColor: Colors.white,
-              hintText: '数字を入力',
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.all(Radius.circular(20)),
               ),
             ),
           ),
-          if (allowMinus) ...[
-            const SizedBox(height: 12),
+          if (minus)
             Row(
               children: [
                 Expanded(
-                  child: FilledButton(
-                    onPressed:
-                        isRolling ? null : () => makeNegative(controller),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accentColor,
-                      minimumSize: const Size(0, 48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                    ),
-                    child: const Text('マイナスにする'),
-                  ),
-                ),
-                const SizedBox(width: 10),
+                    child: FilledButton(
+                        onPressed: () => makeNegative(c),
+                        child: const Text("マイナスにする"))),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        isRolling ? null : () => makePositive(controller),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                      side: BorderSide(color: accentColor, width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                    ),
-                    child: Text(
-                      'プラスにする',
-                      style: TextStyle(color: accentColor),
-                    ),
-                  ),
-                ),
+                    child: OutlinedButton(
+                        onPressed: () => makePositive(c),
+                        child: const Text("プラスにする"))),
               ],
-            ),
-          ],
+            )
         ],
       ),
     );
@@ -317,206 +238,57 @@ class _RandomPageState extends State<RandomPage> {
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = hasFinalResult ? 96.0 : 54.0;
+    final size = hasFinalResult ? 90.0 : 50.0;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('🎀 乱数ルーレット 🎀'),
         centerTitle: true,
-        backgroundColor: const Color(0xFFFFD6EA),
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(18),
-          children: [
-            const Text(
-              '例：-20〜20、間隔5',
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          inputCard("最小値", "⬇️", minController, Colors.blue.shade50),
+          inputCard("最大値", "⬆️", maxController, Colors.pink.shade50),
+          inputCard("間隔", "📏", stepController, Colors.orange.shade50,
+              minus: false),
+
+          SwitchListTile(
+            title: Text(soundOn ? "🔊 ON" : "🔇 OFF"),
+            value: soundOn,
+            onChanged: (v) {
+              setState(() => soundOn = v);
+              saveSettings();
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          Text("結果",
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF8A5A70),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 14),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
 
-            numberCard(
-              title: '最小値',
-              emoji: '⬇️',
-              controller: minController,
-              backgroundColor: const Color(0xFFE3F2FD),
-              accentColor: const Color(0xFF1976D2),
-              allowMinus: true,
-            ),
-            numberCard(
-              title: '最大値',
-              emoji: '⬆️',
-              controller: maxController,
-              backgroundColor: const Color(0xFFFFE4F2),
-              accentColor: const Color(0xFFD81B60),
-              allowMinus: true,
-            ),
-            numberCard(
-              title: '間隔',
-              emoji: '📏',
-              controller: stepController,
-              backgroundColor: const Color(0xFFFFF3E0),
-              accentColor: const Color(0xFFF57C00),
-              allowMinus: false,
-            ),
+          Text(result?.toString() ?? "？",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: size)),
 
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: SwitchListTile(
-                title: Text(soundOn ? '🔊 効果音 ON' : '🔇 効果音 OFF'),
-                value: soundOn,
-                onChanged: isRolling
-                    ? null
-                    : (value) {
-                        setState(() {
-                          soundOn = value;
-                        });
-                        saveSettings();
-                      },
-              ),
-            ),
+          const SizedBox(height: 20),
 
-            const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: generate,
+            child: const Text("🎰 ルーレットをまわす"),
+          ),
 
-            AnimatedScale(
-              scale: isRolling ? 1.04 : hasFinalResult ? 1.16 : 1.0,
-              duration: const Duration(milliseconds: 250),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 34),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(36),
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFFFFB8DA),
-                      Color(0xFFFFE4F2),
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.pinkAccent.withOpacity(0.25),
-                      blurRadius: 24,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    const Text(
-                      '結果',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF7A2450),
-                      ),
-                    ),
-                    AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 300),
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF7A2450),
-                      ),
-                      child: Text(
-                        result == null ? '？' : '$result',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          const SizedBox(height: 20),
 
-            const SizedBox(height: 24),
-
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(34),
-                gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFFFF5FA2),
-                    Color(0xFFFF9ACB),
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.pinkAccent.withOpacity(0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: FilledButton.icon(
-                onPressed: isRolling ? null : generate,
-                icon: const Icon(Icons.casino),
-                label: Text(isRolling ? 'くるくる中…' : '🎰 ルーレットをまわす'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  minimumSize: const Size(double.infinity, 64),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(34),
-                  ),
-                  textStyle: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 26),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  '📜 履歴',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF7A2450),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed:
-                      history.isEmpty || isRolling ? null : clearHistory,
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('消去'),
-                ),
-              ],
-            ),
-
-            if (history.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text("まだ履歴はありません 🐣")),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: history.map((value) {
-                  return Chip(
-                    label: Text(
-                      value.toString(),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    backgroundColor: const Color(0xFFFFE4F2),
-                    side: const BorderSide(color: Color(0xFFFFB8DA)),
-                  );
-                }).toList(),
-              ),
-          ],
-        ),
+          Wrap(
+            spacing: 8,
+            children: history
+                .map((e) => Chip(label: Text(e.toString())))
+                .toList(),
+          ),
+        ],
       ),
     );
   }
